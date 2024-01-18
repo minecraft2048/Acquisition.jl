@@ -11,6 +11,10 @@ using ThreadsX
 
 using PrettyTables
 
+using Tracy
+using Bumper
+using AllocCheck
+
 export acquire,
     plot_acquisition_results,
     coarse_fine_acquire,
