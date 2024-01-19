@@ -17,7 +17,7 @@ function acquire(
     noncoherent_rounds = 1,
     compensate_doppler_code = true,
     coherent_integration_length=get_code_length(system)/get_code_frequency(system),
-    plan=AcquisitionPlan
+    plan=AcquisitionPlanCPU
 )
 
     coherent_integration_length_samples = Int(ceil(upreferred(coherent_integration_length * sampling_freq)))
@@ -53,7 +53,7 @@ function acquire(
     coherent_integration_length=get_code_length(system)/get_code_frequency(system),
     dopplers = -max_doppler:1/3/(coherent_integration_length):max_doppler,
     compensate_doppler_code=true,
-    plan=AcquisitionPlan
+    plan=AcquisitionPlanCPU
     )
 
     only(acquire(system, signal, sampling_freq, [prn]; interm_freq, dopplers, coherent_integration_length,noncoherent_rounds, plan=plan,compensate_doppler_code=compensate_doppler_code))
@@ -408,11 +408,15 @@ TODO don't use this until it passes regression test
                         @tracepoint "Inner loop" begin
                             @tracepoint "Complex conjugate"  @. plan.code_freq_baseband_freq_domain = code_fd * conj(plan.signal_baseband_freq_domain) 
                             @tracepoint "Inverse FFT" ldiv!(plan.code_baseband, plan.fft_plan, plan.code_freq_baseband_freq_domain)
-                            if plan.compensate_doppler_code != false
-                                Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
-                                signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(circshift(plan.code_baseband,-Ns))
+                            if round_idx == 1 #For first noncoherent integration we overwrite the output buffer
+                                    signal_power_each_prn[:,doppler_idx] .= abs2.(plan.code_baseband)
                             else
-                                signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(plan.code_baseband)
+                                if plan.compensate_doppler_code != false
+                                    Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
+                                    signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(circshift(plan.code_baseband,-Ns))
+                                else
+                                    signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(plan.code_baseband)
+                                end
                             end
                                 #=                             
                                 for i in eachindex(plan.code_baseband)
@@ -570,86 +574,6 @@ TODO don't use this until it passes regression test
         signal_powers = plan.signal_powers
     end
 
-    #= Loop count calculation 
-
-        For:
-        noncoherent rounds = 1000
-        prn = 2
-        doppler taps = 43
-
-        Loop order 1:
-
-        for each 1ms signal_chunk (1000)
-            for each prns (2)
-                for each doppler frequency (43)
-                    signal_chunk = downconvert(signal_chunk, doppler) (1000*43*2 = 86000)
-                    signal_freq_domain = fft(signal_chunk) (1000*43*2 = 86000)
-                    correlation_freq_domain = signal_freq_domain * conj(code_freq_domain) (1000*43*2 = 86000)
-                    correlation = ifft(correlation_freq_domain) (1000*43*2 = 86000)
-                    power_array = power_array + doppler_compensation() (1000*43*2 = 86000)
-
-        total ops = 5*86000 = 430000
-
-
-        Loop order 2:
-        
-        for each 1ms signal_chunk (1000)
-            for each doppler frequency (43)
-                signal_chunk = downconvert(signal_chunk, doppler) (1000*43 = 43000)
-                signal_freq_domain = fft(signal_chunk) (1000*43 = 43000)
-                for each prns (2)
-                    correlation_freq_domain = signal_freq_domain * conj(code_freq_domain) (1000*43*2 = 86000)
-                    correlation = ifft(correlation_freq_domain) (1000*43*2 = 86000)
-                    power_array = power_array + doppler_compensation() (1000*43*2 = 86000)
-
-        total ops = 43000+43000+86000+86000+86000 = 344000 but this might have worse memory store locality
-
-        Variables that depends on number of PRNs are:
-
-        signal_powers
-        codes_freq_domain
-
-        Variables that depends on number of threads are:
-        (currently none)
-        
-    =#
-
-
-    #loop order 1
-
-#=     for (chunk,round_idx) in zip(Iterators.partition(signal[1:(noncoherent_rounds*plan.signal_length)],plan.signal_length), 0:noncoherent_rounds-1)
-        for (signal_power_each_prn,code_fd) in zip(signal_powers,plan.codes_freq_domain) #this implies the PRNs
-
-
-            for (doppler, signal_power_each_doppler) in zip(plan.dopplers, eachcol(signal_power_each_prn))
-                downconvert!(plan.signal_baseband, chunk, interm_freq + doppler, plan.sampling_freq) #43*2 downconverts
-                mul!(plan.signal_baseband_freq_domain, plan.fft_plan, plan.signal_baseband) # signal_baseband_freq_domain = fft(signal_baseband)
-                                                                                            #43*2 ffts
-                
-                
-                @. plan.code_freq_baseband_freq_domain = code_fd * conj(plan.signal_baseband_freq_domain) #This is currently scalar code
-                ldiv!(plan.code_baseband, plan.fft_plan, plan.code_freq_baseband_freq_domain) # code_baseband =  ifft(code_freq_baseband_freq_domain)
-
-                #Do doppler compensation using CM-ABS algo 3 step 6 eqn 7
-
-                Ns = sign(ustrip(doppler) - ustrip(center_frequency)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(center_frequency))/ustrip(get_center_frequency(plan.system)), RoundNearest)
-
-                #plan.code_baseband .= abs2.(plan.code_baseband) #will this vectorize???
-
-                
-                #signal_power_each_doppler .= signal_power_each_doppler .+ abs2.((circshift(plan.code_baseband, -Ns)))
-
-                #Handwritten loop to do circshift and add simultaneously
-                #circshift is a slow operation, it shows up on the profiler
-
-                for i in eachindex(signal_power_each_doppler)
-                    signal_power_each_doppler[i] = signal_power_each_doppler[i] + abs2(plan.code_baseband[i])
-                end
-            end
-        end
-    end =#
-    #loop order 2
-    #Split work buffers into chunks
 
     #n_chunk = length(plan.dopplers) ÷ plan.n_threads
     n_chunk = Int(ceil(length(plan.dopplers) / plan.n_threads))
@@ -665,7 +589,7 @@ TODO don't use this until it passes regression test
 
         chunk = view(signal, chunk_idxs)
 
-        begin
+        @tracepoint "Signal chunk" begin
 
             @sync begin
                 
@@ -682,8 +606,7 @@ TODO don't use this until it passes regression test
 
                     Threads.@spawn begin
                         for (doppler_idx, doppler) in zip(doppler_idx_c, doppler_c)
-                            begin
-
+                            @tracepoint "Inner loop" begin
                                 @no_escape signal_baseband_arena begin
                                 signal_baseband = @alloc(ComplexF32, plan.signal_length)
                                 downconvert!(signal_baseband, chunk, interm_freq + doppler, plan.sampling_freq)
@@ -697,18 +620,18 @@ TODO don't use this until it passes regression test
                                                 @no_escape code_baseband_arena begin
                                                     code_baseband = @alloc(ComplexF32,plan.signal_length)
                                                     mul!(code_baseband, plan.inverse_fft_plan, code_freq_baseband_freq_domain)
-                                                    #TODO add another arena here
-#=                                                     for i in eachindex(code_baseband)
-                                                        @inbounds signal_power_each_prn[i,doppler_idx] = signal_power_each_prn[i,doppler_idx] + abs2(code_baseband[i])
-                                                    end =#
-                                                    if plan.compensate_doppler_code != false
-                                                        Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
-                                                        signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(circshift(code_baseband,-Ns))
-                                                    else
-                                                        signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(code_baseband)
-                                                    end
-                        
+                                                    #TODO add another arena here #
 
+                                                    if round_idx == 1 #For first noncoherent integration we overwrite the output buffer
+                                                        signal_power_each_prn[:,doppler_idx] .= abs2.(code_baseband)
+                                                    else
+                                                        if plan.compensate_doppler_code != false
+                                                            Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
+                                                            signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(circshift(code_baseband,-Ns))
+                                                        else
+                                                            signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(code_baseband)
+                                                        end
+                                                    end
                                                 end
                                             end
                                     end    
