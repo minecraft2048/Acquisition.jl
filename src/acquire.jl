@@ -196,9 +196,9 @@ TODO don't use this until it passes regression test
 =#
 
 
-    @tracepoint "Sanity checking" all(map(prn -> prn in acq_plan.avail_prn_channels, prns)) ||
+     all(map(prn -> prn in acq_plan.avail_prn_channels, prns)) ||
         throw(ArgumentError("You'll need to plan every PRN"))
-    @tracepoint "Code period" code_period = get_code_length(acq_plan.system) / get_code_frequency(acq_plan.system)
+     code_period = get_code_length(acq_plan.system) / get_code_frequency(acq_plan.system)
 
     #Currently we parallelize over doppler taps 
     #It might be faster if we parallelize over PRNs, 
@@ -221,7 +221,7 @@ TODO don't use this until it passes regression test
     read/write buffers:
     signal_baseband
     =#
-    @tracepoint "Setup" begin 
+     begin 
         plan = acq_plan
         intermediate_freq = interm_freq
         noncoherent_rounds = plan.noncoherent_rounds
@@ -274,25 +274,25 @@ TODO don't use this until it passes regression test
     =#
     #loop order 2
 
-    @tracepoint "Correlation" for (chunk,round_idx) in zip(Iterators.partition(signal[1:(noncoherent_rounds*plan.signal_length)],plan.signal_length), 0:noncoherent_rounds-1)
-        @tracepoint "Signal chunk" begin
+     for (chunk,round_idx) in zip(Iterators.partition(signal[1:(noncoherent_rounds*plan.signal_length)],plan.signal_length), 0:noncoherent_rounds-1)
+         begin
             for (doppler_idx,doppler) in enumerate(plan.dopplers)
-                @tracepoint "Doppler taps" begin
+                 begin
                     for (signal_power_each_prn,code_fd, doppler_offset) in zip(signal_powers,plan.codes_freq_domain, doppler_offsets)
-                        @tracepoint "Inner loop" begin
-                            @tracepoint "Downconvert" downconvert!(plan.signal_baseband, chunk, interm_freq + doppler + doppler_offset , plan.sampling_freq) 
-                            @tracepoint "Forward FFT" mul!(plan.signal_baseband_freq_domain, plan.fft_plan, plan.signal_baseband)        
-                            @tracepoint "Complex conjugate"  @. plan.code_freq_baseband_freq_domain = code_fd * conj(plan.signal_baseband_freq_domain) 
-                            @tracepoint "Inverse FFT" ldiv!(plan.code_baseband, plan.fft_plan, plan.code_freq_baseband_freq_domain)
-                            @tracepoint "Doppler and acc" begin 
+                         begin
+                             downconvert!(plan.signal_baseband, chunk, interm_freq + doppler + doppler_offset , plan.sampling_freq) 
+                             mul!(plan.signal_baseband_freq_domain, plan.fft_plan, plan.signal_baseband)        
+                              @. plan.code_freq_baseband_freq_domain = code_fd * conj(plan.signal_baseband_freq_domain) 
+                             ldiv!(plan.code_baseband, plan.fft_plan, plan.code_freq_baseband_freq_domain)
+                             begin 
                                 if round_idx == 0 #For first noncoherent integration we overwrite the output buffer
-                                    @tracepoint "init abs2" signal_power_each_prn[:,doppler_idx] .= abs2.(plan.code_baseband)
+                                     signal_power_each_prn[:,doppler_idx] .= abs2.(plan.code_baseband)
                                 else
                                     if plan.compensate_doppler_code != false
-                                        @tracepoint "Ns" Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
-                                        @tracepoint "circshift" tmp = circshift(plan.code_baseband,-Ns)
-                                        @tracepoint "abs2" tmp .= abs2.(tmp)
-                                        @tracepoint "acc" signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ tmp
+                                         Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
+                                         tmp = circshift(plan.code_baseband,-Ns)
+                                         tmp .= abs2.(tmp)
+                                         signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ tmp
                                     else
                                         signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(plan.code_baseband)
                                     end
@@ -318,7 +318,7 @@ TODO don't use this until it passes regression test
         noise_powers = [nothing for _ in prns]
     end
 
-    @tracepoint "Postprocessing" map(signal_powers, prns, doppler_offsets, noise_powers) do powers, prn, doppler_offset, noise_power
+     map(signal_powers, prns, doppler_offsets, noise_powers) do powers, prn, doppler_offset, noise_power
         signal_power, noise_power, code_index, doppler_index = est_signal_noise_power(
             powers,
             acq_plan.sampling_freq,
@@ -420,7 +420,7 @@ TODO don't use this until it passes regression test
 
         chunk = view(signal, chunk_idxs)
 
-        @tracepoint "Signal chunk" begin
+         begin
 
             @sync begin
                 
@@ -437,7 +437,7 @@ TODO don't use this until it passes regression test
 
                     Threads.@spawn begin
                         for (doppler_idx, doppler) in zip(doppler_idx_c, doppler_c)
-                            @tracepoint "Inner loop" begin
+                             begin
                                 for (signal_power_each_prn,code_fd, doppler_offset) in zip(signal_powers,plan.codes_freq_domain,doppler_offsets)
                                     @no_escape signal_baseband_arena begin
                                         signal_baseband = @alloc(ComplexF32, plan.signal_length)
