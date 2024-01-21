@@ -99,10 +99,10 @@ include("acquire.jl")
         # all calls in this block will be precompiled, regardless of whether
         # they belong to your package or not (on Julia 1.8 and higher)
         samplerate = rate*Hz
-        coarse_fine_acquire(GPSL1(),data_ci8[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
-        coarse_fine_acquire(GPSL1(),data_ci16[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
-        coarse_fine_acquire(GPSL1(),data_cf32[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
-        coarse_fine_acquire(GPSL1(),data_cf64[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
+        acquire(GPSL1(),data_ci8[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
+        acquire(GPSL1(),data_ci16[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
+        acquire(GPSL1(),data_cf32[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
+        acquire(GPSL1(),data_cf64[1:2048], samplerate, 1:32; interm_freq=0*Hz, max_doppler=40e3*Hz);
 
     end
 end
