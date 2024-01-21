@@ -28,6 +28,10 @@ export acquire,
     noncoherent_integrate!,
     preallocate_thread_local_buffer
 
+
+export AcquisitionPlanCPU, AcquisitionPlanCPUMultithreaded
+
+
 struct AcquisitionResults{S<:AbstractGNSS,T,T2<:StepRangeLen}
     system::S
     prn::Int
