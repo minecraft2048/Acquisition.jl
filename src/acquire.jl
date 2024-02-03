@@ -17,7 +17,8 @@ function acquire(
     noncoherent_rounds = 1,
     compensate_doppler_code = true,
     coherent_integration_length=get_code_length(system)/get_code_frequency(system),
-    plan=AcquisitionPlanCPU
+    plan=AcquisitionPlanCPU,
+    doppler_offsets = (0.0Hz for _ in prns)
 )
 
     coherent_integration_length_samples = Int(ceil(upreferred(coherent_integration_length * sampling_freq)))
@@ -31,7 +32,7 @@ function acquire(
         compensate_doppler_code = compensate_doppler_code,
         noncoherent_rounds= noncoherent_rounds
     )
-    acquire!(acq_plan, signal, prns; interm_freq)
+    acquire!(acq_plan, signal, prns; interm_freq, doppler_offsets)
 end
 
 """
@@ -456,8 +457,8 @@ TODO don't use this until it passes regression test
                                                         signal_power_each_prn[:,doppler_idx] .= abs2.(code_baseband)
                                                     else
                                                         if plan.compensate_doppler_code != false
-                                                            Ns = sign(ustrip(doppler) - ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) - ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
-                                                            signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(circshift(code_baseband,-Ns))
+                                                            Ns = sign(ustrip(doppler) + ustrip(doppler_offset)) * round(round_idx*0.001* ustrip(plan.sampling_freq) * abs(ustrip(doppler) + ustrip(doppler_offset))/ustrip(get_center_frequency(plan.system)), RoundNearest)
+                                                            signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(circshift(code_baseband,-Ns)) #TODO circshift is allocating
                                                         else
                                                             signal_power_each_prn[:,doppler_idx] .= signal_power_each_prn[:,doppler_idx] .+ abs2.(code_baseband)
                                                         end
