@@ -260,6 +260,7 @@ function AcquisitionPlanCPU(
     fft_flag = FFTW.MEASURE,
     compensate_doppler_code = false,
     noncoherent_rounds = 1,
+    flip_correlation = false
 )
 #=     signal_baseband,
     signal_baseband_freq_domain,
@@ -344,6 +345,7 @@ struct AcquisitionPlanCPUMultithreaded{S,DS,CS,P,P2,PS,T} <: AbstractAcquisition
     compensate_doppler_code::Bool
     noncoherent_rounds::Int
     n_threads::Int
+    flip_correlation::Bool
 end
 
 
@@ -357,7 +359,8 @@ function AcquisitionPlanCPUMultithreaded(
     fft_flag = FFTW.MEASURE,
     compensate_doppler_code = false,
     noncoherent_rounds = 1,
-    n_threads=Threads.nthreads()
+    n_threads=Threads.nthreads(),
+    flip_correlation= false,
 )
 #=     signal_baseband,
     signal_baseband_freq_domain,
@@ -435,7 +438,8 @@ function AcquisitionPlanCPUMultithreaded(
         prns,
         compensate_doppler_code,
         noncoherent_rounds,
-        n_threads
+        n_threads,
+        flip_correlation
     )
 end
 

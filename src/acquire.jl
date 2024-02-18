@@ -18,7 +18,8 @@ function acquire(
     compensate_doppler_code = true,
     coherent_integration_length=get_code_length(system)/get_code_frequency(system),
     plan=AcquisitionPlanCPU,
-    doppler_offsets = (0.0Hz for _ in prns)
+    doppler_offsets = (0.0Hz for _ in prns),
+    flip_correlation = false
 )
 
     coherent_integration_length_samples = Int(ceil(upreferred(coherent_integration_length * sampling_freq)))
@@ -30,7 +31,8 @@ function acquire(
         prns, 
         fft_flag = FFTW.ESTIMATE,
         compensate_doppler_code = compensate_doppler_code,
-        noncoherent_rounds= noncoherent_rounds
+        noncoherent_rounds= noncoherent_rounds,
+        flip_correlation = flip_correlation
     )
     acquire!(acq_plan, signal, prns; interm_freq, doppler_offsets)
 end
@@ -448,7 +450,11 @@ TODO don't use this until it passes regression test
                                             mul!(signal_baseband_freq_domain, plan.forward_fft_plan, signal_baseband)    
                                             @no_escape code_freq_baseband_freq_domain_arena begin
                                                 code_freq_baseband_freq_domain = @alloc(ComplexF32, plan.signal_length)
-                                                @. code_freq_baseband_freq_domain = code_fd * conj(signal_baseband_freq_domain) 
+                                                if plan.flip_correlation
+                                                    @. code_freq_baseband_freq_domain = conj(code_fd) * signal_baseband_freq_domain
+                                                else
+                                                    @. code_freq_baseband_freq_domain = code_fd * conj(signal_baseband_freq_domain)
+                                                end
                                                 @no_escape code_baseband_arena begin
                                                     code_baseband = @alloc(ComplexF32,plan.signal_length)
                                                     mul!(code_baseband, plan.inverse_fft_plan, code_freq_baseband_freq_domain)
