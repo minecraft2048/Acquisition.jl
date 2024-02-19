@@ -31,6 +31,7 @@ export acquire,
 
 export AcquisitionPlanCPU, AcquisitionPlanCPUMultithreaded
 
+abstract type AbstractAcquisitionPlan end
 
 struct AcquisitionResults{S<:AbstractGNSS,T,T2<:StepRangeLen}
     system::S
@@ -81,12 +82,20 @@ end
 
 
 
-include("plan_acquire.jl")
+#include("plan_acquire.jl")
 include("downconvert.jl")
 include("plot.jl")
-include("calc_powers.jl")
+#include("calc_powers.jl")
 include("est_signal_noise_power.jl")
+
+
+include("implementations/coarse_fine_acquisition.jl")
+include("implementations/cpu_singlethreaded.jl")
+include("implementations/cpu_multithreaded.jl")
 include("acquire.jl")
+
+#include("acquire.jl")
+
 
 
 @setup_workload begin
